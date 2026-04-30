@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Classroom Lucky Draw</title>
+    <style>
+        :root {
+            --primary-orange: #FF5722;
+            --slot-grey: #A6A6A6;
+            --blue-bg: #2196F3;
+        }
+
+        body { 
+            font-family: 'Arial Black', sans-serif; 
+            background: #f4f4f4; 
+            display: flex; flex-direction: column; align-items: center; padding: 20px; 
+        }
+
+        .header { display: flex; align-items: center; gap: 20px; margin-bottom: 30px; }
+        .ticket-title { 
+            background: var(--primary-orange); color: white; padding: 10px 30px; 
+            border: 4px solid #000; border-radius: 12px; font-size: 2.2rem; 
+            box-shadow: 4px 4px 0px #000;
+        }
+
+        .grid { 
+            display: grid; grid-template-columns: repeat(7, 65px); gap: 12px; 
+            padding: 20px; background: #fff; border: 3px solid #000; border-radius: 8px;
+        }
+
+        .slot {
+            width: 65px; height: 65px; background: var(--slot-grey); 
+            border: 1px solid #666; display: flex; align-items: center; 
+            justify-content: center; font-size: 1.8rem; cursor: pointer;
+            user-select: none; box-shadow: 2px 2px 0px #444; transition: transform 0.1s;
+        }
+
+        /* Revealed States */
+        .slot.revealed { cursor: default; border: 2px solid #000; box-shadow: none; animation: pop 0.3s; }
+        .slot.blue { background: var(--blue-bg); color: white; }
+        .slot.empty { background: #FFFFFF; color: #ccc; }
+
+        @keyframes pop { 0% { transform: scale(0.7); } 100% { transform: scale(1); } }
+
+        .controls { margin-top: 30px; }
+        .reset-btn { padding: 8px 20px; background: #eee; border: 1px solid #ccc; cursor: pointer; font-family: sans-serif; }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <div class="ticket-title">LUCKY DRAW</div>
+    </div>
+
+    <div id="lotteryGrid" class="grid"></div>
+
+    <div class="controls">
+        <button class="reset-btn" onclick="resetGame()">Reset Board</button>
+    </div>
+
+<script>
+    const totalSlots = 63;
+    const storageKey = "lucky_draw_blue_only_v2";
+
+    // Prize list updated: 1 to 24 (Blue only)
+    const blueNums = Array.from({length: 24}, (_, i) => i + 1);
+
+    let boardData = JSON.parse(localStorage.getItem(storageKey));
+
+    // --- Sound Logic ---
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+    function playSound(type) {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+
+        if (type === 'prize') {
+            // High-pitched "Ding"
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(880, audioCtx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(440, audioCtx.currentTime + 0.2);
+            gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.2);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.2);
+        } else {
+            // Lower "Boing" for emoji
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(150, audioCtx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 0.3);
+            gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.3);
+        }
+    }
+
+    function init() {
+        const grid = document.getElementById('lotteryGrid');
+        grid.innerHTML = '';
+
+        if (!boardData) {
+            let pool = [];
+            blueNums.forEach(n => pool.push({ val: n, type: 'blue' }));
+
+            while (pool.length < totalSlots) {
+                pool.push({ val: "😛", type: 'empty' });
+            }
+
+            // Shuffle
+            for (let i = pool.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [pool[i], pool[j]] = [pool[j], pool[i]];
+            }
+
+            boardData = pool.map(item => ({ ...item, open: false }));
+            save();
+        }
+
+        boardData.forEach((item, index) => {
+            const div = document.createElement('div');
+            div.className = 'slot';
+            
+            if (item.open) {
+                div.classList.add('revealed', item.type);
+                div.innerText = item.val;
+            }
+
+            div.onclick = () => {
+                if (!boardData[index].open) {
+                    // Audio context must be resumed on user click
+                    if (audioCtx.state === 'suspended') audioCtx.resume();
+                    
+                    boardData[index].open = true;
+                    div.classList.add('revealed', item.type);
+                    div.innerText = item.val;
+                    
+                    // Play specific sound
+                    if (item.type === 'blue') {
+                        playSound('prize');
+                    } else {
+                        playSound('empty');
+                    }
+                    
+                    save();
+                }
+            };
+            grid.appendChild(div);
+        });
+    }
+
+    function save() { localStorage.setItem(storageKey, JSON.stringify(boardData)); }
+    
+    function resetGame() {
+        if (confirm("Reset the whole board?")) {
+            localStorage.removeItem(storageKey);
+            location.reload();
+        }
+    }
+
+    init();
+</script>
+</body>
+</html>
